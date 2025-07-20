@@ -98,4 +98,188 @@ for _, egg in collectionService:GetTagged("PetEggServer") do
     local petName = getPetForEgg(eggName)
     addESP(egg, eggName, petName)
 end
-... (185 lines left)
+
+collectionService:GetInstanceAddedSignal("PetEggServer"):Connect(function(egg)
+    local eggName = egg:GetAttribute("EggName") or "Unknown Egg"
+    local petName = getPetForEgg(eggName)
+    addESP(egg, eggName, petName)
+end)
+
+collectionService:GetInstanceRemovedSignal("PetEggServer"):Connect(removeESP)
+
+-- GUI SETUP
+local gui = Instance.new("ScreenGui", localPlayer:WaitForChild("PlayerGui"))
+gui.Name = "PetPredictorUI"
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 260, 0, 200)
+frame.Position = UDim2.new(0.5, -130, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 20, 50)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 4)
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, -30, 0, 30)
+title.Position = UDim2.new(0, 10, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "🥚 Egg Randomizer"
+title.TextColor3 = Color3.fromRGB(170, 255, 170)
+title.Font = Enum.Font.Arcade
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local close = Instance.new("TextButton", frame)
+close.Size = UDim2.new(0, 24, 0, 24)
+close.Position = UDim2.new(1, -30, 0, 10)
+close.Text = "X"
+close.TextColor3 = Color3.new(1, 1, 1)
+close.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
+close.Font = Enum.Font.Arcade
+close.TextSize = 16
+Instance.new("UICorner", close).CornerRadius = UDim.new(0, 4)
+
+-- BUTTONS
+local predict = Instance.new("TextButton", frame)
+predict.Size = UDim2.new(0, 220, 0, 36)
+predict.Position = UDim2.new(0.5, -110, 0, 50)
+predict.BackgroundColor3 = Color3.fromRGB(60, 90, 60)
+predict.TextColor3 = Color3.new(1, 1, 1)
+predict.Font = Enum.Font.Arcade
+predict.TextSize = 16
+predict.Text = "🎲 Reroll Egg"
+Instance.new("UICorner", predict).CornerRadius = UDim.new(0, 4)
+
+predict.MouseButton1Click:Connect(function()
+    if not canClick then return end
+    canClick = false
+
+    for _, data in pairs(displayedEggs) do
+        local newPet = getPetForEgg(data.eggName)
+        data.currentPet = newPet
+        if data.label then
+            data.label.Text = string.format("%s | %s (Cooldown...)", data.eggName, newPet)
+        end
+    end
+
+    task.spawn(function()
+        local startTime = tick()
+        while tick() - startTime < cooldown do
+            local timeLeft = cooldown - (tick() - startTime)
+            for _, data in pairs(displayedEggs) do
+                if data and data.label then
+                    data.label.Text = string.format("%s | %s (%.2fs)", data.eggName, data.currentPet, timeLeft)
+                end
+            end
+            task.wait(0.1)
+        end
+
+        for _, data in pairs(displayedEggs) do
+            if data and data.label then
+                data.label.Text = string.format("%s | %s", data.eggName, data.currentPet)
+            end
+        end
+
+        canClick = true
+    end)
+end)
+
+local espBtn = Instance.new("TextButton", frame)
+espBtn.Size = UDim2.new(0, 220, 0, 30)
+espBtn.Position = UDim2.new(0.5, -110, 0, 90)
+espBtn.BackgroundColor3 = Color3.fromRGB(90, 60, 60)
+espBtn.TextColor3 = Color3.new(1, 1, 1)
+espBtn.Font = Enum.Font.Arcade
+espBtn.TextSize = 14
+espBtn.Text = "ESP: ON"
+Instance.new("UICorner", espBtn).CornerRadius = UDim.new(0, 4)
+
+espBtn.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    espBtn.Text = "ESP: " .. (espEnabled and "ON" or "OFF")
+
+    for _, data in pairs(displayedEggs) do
+        local adornee = data.egg:FindFirstChildWhichIsA("BasePart") or data.egg.PrimaryPart
+
+        if espEnabled then
+            if not data.gui or not data.gui.Parent then
+                local newGui = createEspGui(adornee, data.eggName .. " | " .. data.currentPet)
+                data.gui = newGui
+                data.label = newGui:FindFirstChild("TextLabel")
+            end
+            if adornee and not adornee:FindFirstChild("RedAura") then
+                local aura = Instance.new("SelectionBox")
+                aura.Name = "RedAura"
+                aura.Adornee = adornee
+                aura.LineThickness = 0.1
+                aura.SurfaceTransparency = 0.7
+                aura.Color3 = Color3.fromRGB(255, 0, 0)
+                aura.Parent = adornee
+            end
+        else
+            if data.gui then data.gui:Destroy() end
+            if adornee and adornee:FindFirstChild("RedAura") then
+                adornee.RedAura:Destroy()
+            end
+        end
+    end
+end)
+
+local autoBtn = Instance.new("TextButton", frame)
+autoBtn.Size = UDim2.new(0, 220, 0, 30)
+autoBtn.Position = UDim2.new(0.5, -110, 0, 125)
+autoBtn.BackgroundColor3 = Color3.fromRGB(90, 60, 90)
+autoBtn.TextColor3 = Color3.new(1, 1, 1)
+autoBtn.Font = Enum.Font.Arcade
+autoBtn.TextSize = 14
+autoBtn.Text = "Auto Reroll: OFF"
+Instance.new("UICorner", autoBtn).CornerRadius = UDim.new(0, 4)
+
+autoBtn.MouseButton1Click:Connect(function()
+    autoReroll = not autoReroll
+    autoBtn.Text = "Auto Reroll: " .. (autoReroll and "ON" or "OFF")
+end)
+
+-- Auto reroll loop
+task.spawn(function()
+    while true do
+        task.wait(cooldown)
+        if autoReroll and canClick then
+            predict:Activate()
+        end
+    end
+end)
+
+-- Credits
+local credits = Instance.new("TextLabel", frame)
+credits.Size = UDim2.new(1, 0, 0, 20)
+credits.Position = UDim2.new(0, 0, 1, -20)
+credits.BackgroundTransparency = 1
+credits.Text = "made by: Wolyoung"
+credits.Font = Enum.Font.Arcade
+credits.TextSize = 13
+credits.TextColor3 = Color3.fromRGB(200, 200, 200)
+
+-- UI toggle
+local showBtn = Instance.new("TextButton", gui)
+showBtn.Size = UDim2.new(0, 100, 0, 36)
+showBtn.Position = UDim2.new(0, 20, 0.5, -18)
+showBtn.Text = "Show UI"
+showBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 70)
+showBtn.TextColor3 = Color3.new(1, 1, 1)
+showBtn.Font = Enum.Font.Arcade
+showBtn.TextSize = 16
+Instance.new("UICorner", showBtn).CornerRadius = UDim.new(0, 4)
+showBtn.Visible = false
+
+close.MouseButton1Click:Connect(function()
+    frame.Visible = false
+    showBtn.Visible = true
+end)
+
+showBtn.MouseButton1Click:Connect(function()
+    frame.Visible = true
+    showBtn.Visible = false
+end)
